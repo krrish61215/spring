@@ -5,6 +5,12 @@ import javax.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,38 +20,41 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.nagarro.exittest_spring.entity.User;
 import com.nagarro.exittest_spring.service.UserService;
+import com.nagarro.exittest_spring.util.JwtUtil;
 
 @RestController
 @RequestMapping("/api/user")
 public class UserController {
-    private UserService userService;
+    private final UserService userService;
+    private final JwtUtil jwtUtil;
+    private final AuthenticationManager authenticationManager;
+    private final UserDetailsService userDetailsService;
 
     @Autowired
-    public UserController(UserService userService) {
+    public UserController(UserService userService, JwtUtil jwtUtil, AuthenticationManager authenticationManager, UserDetailsService userDetailsService) {
         this.userService = userService;
+        this.jwtUtil = jwtUtil;
+        this.authenticationManager = authenticationManager;
+        this.userDetailsService = userDetailsService;
     }
 
     @CrossOrigin(origins = "http://localhost:4200")
     @PostMapping("/login")
     public ResponseEntity<String> login(@RequestBody User login, HttpSession session) {
-        User user = userService.login(login);
-        
-        if(user != null) {
-            session.setAttribute("user", user);
-            
-            // Check the user type
-            String userType = user.getUserType();
-            if (userType.equals("admin")) {
-                return ResponseEntity.ok().body("Admin user logged in successfully");
-            } else if (userType.equals("user")) {
-                return ResponseEntity.ok().body("Standard user logged in successfully");
-            } else {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Unknown user type");
-            }
-            
-        } else {
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(login.getUsername(), login.getPassword())
+            );
+        } catch (BadCredentialsException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid username or password");
+        } catch (AuthenticationException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Authentication failed");
         }
+
+        final UserDetails userDetails = userDetailsService.loadUserByUsername(login.getUsername());
+        final String token = jwtUtil.generateToken(userDetails.getUsername(), userDetails.getAuthorities().toString());
+
+        return ResponseEntity.ok().body(token);
     }
 
     @CrossOrigin(origins = "http://localhost:4200")

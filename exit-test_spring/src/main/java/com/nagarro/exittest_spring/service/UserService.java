@@ -23,7 +23,7 @@ public class UserService {
     public User login(User login) {
         User user = userRepository.findByUsername(login.getUsername());
         
-        if (user != null && passwordEncoder.matches(login.getPassword(), user.getPassword()) && login.getUserType().equals(user.getUserType())) {
+        if(user != null && passwordEncoder.matches(login.getPassword(), user.getPassword())) {
             return user;
         } else {
             return null;
